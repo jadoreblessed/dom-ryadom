@@ -1,0 +1,26 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: domryadom
+      POSTGRES_USER: domryadom
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-domryadom}
+    volumes:
+      - ./migrations/001_init.sql:/docker-entrypoint-initdb.d/001_init.sql:ro
+      - ./migrations/002_seed.sql:/docker-entrypoint-initdb.d/002_seed.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U domryadom -d domryadom"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  app:
+    build: .
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://domryadom:${POSTGRES_PASSWORD:-domryadom}@db:5432/domryadom?sslmode=disable
+    ports:
+      - "8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
