@@ -382,3 +382,42 @@ func TestSessionSignedWithOtherSecretIsRejected(t *testing.T) {
 		t.Errorf("сессия под чужим секретом принята: %d", rec.Code)
 	}
 }
+
+func TestGeneratePasswordIsRandomAndStrong(t *testing.T) {
+	// Пароль, который печатается в лог при первом запуске, обязан быть
+	// непредсказуемым: он единственный раз попадает в открытый текст.
+	first, err := generatePassword()
+	if err != nil {
+		t.Fatalf("generatePassword: %v", err)
+	}
+
+	second, err := generatePassword()
+	if err != nil {
+		t.Fatalf("generatePassword: %v", err)
+	}
+
+	if first == second {
+		t.Error("два пароля совпали — генератор не случайный")
+	}
+
+	// 12 байт энтропии дают 16 символов base64. Меньше 12 байт пароль
+	// перебирается, больше — превращается в нечитаемый ключ в логах.
+	if len(first) != 16 {
+		t.Errorf("длина пароля %d символов (строка %q), ждали 16", len(first), first)
+	}
+
+	if err := verifyPassword(mustHash(t, first), first); err != nil {
+		t.Errorf("сгенерированный пароль не проходит проверку: %v", err)
+	}
+}
+
+func mustHash(t *testing.T, password string) string {
+	t.Helper()
+
+	hash, err := hashPassword(password)
+	if err != nil {
+		t.Fatalf("hashPassword: %v", err)
+	}
+
+	return hash
+}

@@ -372,18 +372,34 @@ func handleLogout(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// ensureDispatcher создаёт первого диспетчера из переменных окружения.
+// ensureDispatcher создаёт первого диспетчера.
 //
-// DO NOTHING, а не DO UPDATE: пароль из .env — это заготовка на первый запуск,
-// а не постоянный источник правды. С DO UPDATE каждый перезапуск перетирал бы
+// DO NOTHING, а не DO UPDATE: пароль — это заготовка на первый запуск, а не
+// постоянный источник правды. С DO UPDATE каждый перезапуск перетирал бы
 // пароль, который диспетчер сменил сам, и «смена пароля» была бы иллюзией.
+//
+// Если в DISPATCHER_PASSWORD ничего нет, пароль не берётся из файла, а
+// генерируется случайный и печатается в лог один раз. Заглушка вида
+// «change-me» в .env опаснее отсутствия пароля: она одинаково подходит всем,
+// кто её видел, и лежит в файле, который однако уедет в репозиторий.
 func ensureDispatcher(ctx context.Context) error {
 	login := strings.TrimSpace(os.Getenv("DISPATCHER_LOGIN"))
-	password := os.Getenv("DISPATCHER_PASSWORD")
 
-	if login == "" || password == "" {
-		log.Println("DISPATCHER_LOGIN или DISPATCHER_PASSWORD не заданы — новые диспетчеры не создаются")
+	if login == "" {
+		log.Println("DISPATCHER_LOGIN не задан — новые диспетчеры не создаются")
 		return nil
+	}
+
+	password := os.Getenv("DISPATCHER_PASSWORD")
+	generated := false
+
+	if password == "" {
+		var err error
+		if password, err = generatePassword(); err != nil {
+			return err
+		}
+
+		generated = true
 	}
 
 	hash, err := hashPassword(password)
@@ -401,7 +417,13 @@ func ensureDispatcher(ctx context.Context) error {
 	}
 
 	if tag.RowsAffected() == 0 {
-		log.Printf("диспетчер %q уже существует, пароль из .env не применялся", login)
+		log.Printf("диспетчер %q уже существует, пароль не применялся", login)
+		return nil
+	}
+
+	if generated {
+		log.Printf("создан диспетчер %q, пароль сгенерирован: %s", login, password)
+		log.Println("сохраните пароль сейчас — он больше нигде не хранится, только хеш в базе")
 		return nil
 	}
 
@@ -409,4 +431,18 @@ func ensureDispatcher(ctx context.Context) error {
 	log.Println("пароль из .env — только заготовка для первого входа: смените его и уберите из .env")
 
 	return nil
+}
+
+// generatePassword делает пароль из криптографически случайных байт.
+//
+// Такой пароль невозможно угадать перебором и невозможно прочитать из файла:
+// единственное место, где он существует, — строка в логе при первом запуске.
+func generatePassword() (string, error) {
+	buf := make([]byte, 12)
+
+	if _, err := rand.Read(buf); err != nil {
+		return "", fmt.Errorf("генерация пароля: %w", err)
+	}
+
+	return base64.RawURLEncoding.EncodeToString(buf), nil
 }
