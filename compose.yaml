@@ -8,6 +8,8 @@ services:
     volumes:
       - ./migrations/001_init.sql:/docker-entrypoint-initdb.d/001_init.sql:ro
       - ./migrations/002_seed.sql:/docker-entrypoint-initdb.d/002_seed.sql:ro
+      - ./migrations/003_request_comment.sql:/docker-entrypoint-initdb.d/003_request_comment.sql:ro
+      - ./migrations/004_backfill_history.sql:/docker-entrypoint-initdb.d/004_backfill_history.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U domryadom -d domryadom"]
       interval: 3s

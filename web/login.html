@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Вход — Дом рядом</title>
+
+    <!-- Стили те же, что в admin.html: страница входа не должна выглядеть
+         чужеродно рядом с панелью, в которую ведёт. -->
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            max-width: 420px;
+            margin: 0 auto;
+            padding: 56px 20px;
+            background: #f3f7f6;
+            color: #17342f;
+            font-family: Arial, sans-serif;
+        }
+
+        h1 {
+            margin: 0 0 8px;
+            color: #176b60;
+            font-size: 26px;
+        }
+
+        p.subtitle {
+            margin: 0 0 28px;
+            color: #6b7d79;
+            font-size: 15px;
+            line-height: 1.5;
+        }
+
+        form {
+            display: grid;
+            gap: 16px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 6px;
+            font-size: 14px;
+            font-weight: bold;
+        }
+
+        input {
+            width: 100%;
+            min-height: 46px;
+            padding: 0 14px;
+            border: 1px solid #d7e3e0;
+            border-radius: 12px;
+            font: inherit;
+            background: white;
+        }
+
+        input:focus {
+            outline: 2px solid #176b60;
+            outline-offset: 1px;
+        }
+
+        button {
+            min-height: 48px;
+            border: 0;
+            border-radius: 12px;
+            background: #176b60;
+            color: white;
+            font: inherit;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: default;
+        }
+
+        #message {
+            min-height: 22px;
+            margin: 0;
+            color: #b3402f;
+            font-size: 14px;
+        }
+
+        p.back {
+            margin: 24px 0 0;
+            font-size: 14px;
+        }
+
+        p.back a {
+            color: #176b60;
+        }
+    </style>
+</head>
+<body>
+    <h1>Панель диспетчера</h1>
+    <p class="subtitle">Вход для сотрудника управляющей организации. Заявки жителей видны только после входа.</p>
+
+    <form id="login-form">
+        <div>
+            <label for="login">Логин</label>
+            <input id="login" name="login" autocomplete="username" autocapitalize="off"
+                   spellcheck="false" required>
+        </div>
+
+        <div>
+            <label for="password">Пароль</label>
+            <input id="password" name="password" type="password" autocomplete="current-password" required>
+        </div>
+
+        <button type="submit">Войти</button>
+    </form>
+
+    <p id="message" role="alert"></p>
+
+    <p class="back"><a href="/app">Вернуться к подаче заявки</a></p>
+
+    <script>
+        const form = document.getElementById("login-form");
+        const message = document.getElementById("message");
+
+        form.addEventListener("submit", async function (event) {
+            event.preventDefault();
+
+            const button = form.querySelector("button");
+
+            button.disabled = true;
+            message.textContent = "";
+
+            try {
+                const response = await fetch("/auth/login", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        login: document.getElementById("login").value,
+                        password: document.getElementById("password").value
+                    })
+                });
+
+                if (response.status === 401) {
+                    // Один текст и на «нет такого логина», и на «неверный пароль»:
+                    // подсказывать, какая именно часть неверна, не надо.
+                    message.textContent = "Неверный логин или пароль.";
+                    button.disabled = false;
+                    document.getElementById("password").value = "";
+                    return;
+                }
+
+                if (!response.ok) {
+                    const data = await response.json().catch(function () {
+                        return {};
+                    });
+
+                    message.textContent = data.error || "Ошибка сервера";
+                    button.disabled = false;
+                    return;
+                }
+
+                location.href = "/admin";
+            } catch (error) {
+                message.textContent = "Не удалось войти. Проверьте соединение и попробуйте ещё раз.";
+                button.disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>

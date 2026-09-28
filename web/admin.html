@@ -44,6 +44,11 @@
             cursor: pointer;
         }
 
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
         #requests {
             display: grid;
             gap: 16px;
@@ -57,6 +62,10 @@
         }
 
         .request-card h2 {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
             margin: 0 0 14px;
             font-size: 20px;
             color: #176b60;
@@ -71,9 +80,173 @@
             display: inline-block;
             padding: 6px 10px;
             border-radius: 20px;
+            font-weight: bold;
+            white-space: nowrap;
+        }
+
+        .status[data-status="Новая"] {
+            background: #e3f0f8;
+            color: #1e5f8c;
+        }
+
+        .status[data-status="В работе"] {
+            background: #fdf0d5;
+            color: #8a5a00;
+        }
+
+        .status[data-status="Выполнена"] {
             background: #e1f1ed;
             color: #176b60;
-            font-weight: bold;
+        }
+
+        .status[data-status="Отклонена"] {
+            background: #fbe6e6;
+            color: #a32d2d;
+        }
+
+        .controls {
+            display: grid;
+            gap: 10px;
+            margin-top: 16px;
+            padding-top: 16px;
+            border-top: 1px solid #e7efed;
+        }
+
+        .controls input,
+        .controls select {
+            width: 100%;
+            padding: 11px 14px;
+            border: 1px solid #d7e3e0;
+            border-radius: 12px;
+            font: inherit;
+            color: inherit;
+            background: #fbfdfd;
+        }
+
+        .controls input:focus,
+        .controls select:focus {
+            outline: 2px solid #176b60;
+            outline-offset: 1px;
+        }
+
+        .closed {
+            margin: 0;
+            color: #5a6b68;
+            font-size: 14px;
+        }
+
+        .controls button.ghost {
+            margin-top: 10px;
+        }
+
+        /* Журнал смены статусов: каждая запись — строка в три колонки плюс
+           причина отказа, если она была. */
+        ul.history {
+            list-style: none;
+            margin: 12px 0 0;
+            padding: 10px 12px;
+            background: #f4f7f6;
+            border-radius: 8px;
+        }
+
+        ul.history li {
+            display: grid;
+            grid-template-columns: 92px minmax(0, 1fr) 96px;
+            gap: 4px 10px;
+            padding: 5px 0;
+            font-size: 13px;
+            border-bottom: 1px solid #e2e9e7;
+        }
+
+        ul.history li:last-child {
+            border-bottom: none;
+        }
+
+        ul.history .history-when {
+            color: #5a6b68;
+            font-variant-numeric: tabular-nums;
+        }
+
+        ul.history .history-what {
+            color: #1c2b28;
+        }
+
+        ul.history .history-who {
+            color: #5a6b68;
+            text-align: right;
+        }
+
+        /* Причина идёт на всю ширину строки: она длиннее, чем дата и автор, и
+           в общий столбец не помещается. */
+        ul.history .history-reason {
+            grid-column: 1 / -1;
+            color: #7a3b1d;
+        }
+
+        ul.history .history-empty {
+            display: block;
+            color: #5a6b68;
+        }
+
+        @media (max-width: 560px) {
+            ul.history li {
+                grid-template-columns: 80px minmax(0, 1fr);
+            }
+
+            ul.history .history-who {
+                text-align: left;
+                grid-column: 2;
+            }
+        }
+
+        .reject-reason {
+            margin: -4px 0 14px;
+            padding: 10px 12px;
+            border-left: 3px solid #a32d2d;
+            border-radius: 8px;
+            background: #fbe6e6;
+            color: #a32d2d;
+            line-height: 1.4;
+        }
+
+        .card-message {
+            margin: 0;
+            padding: 10px 12px;
+            border-radius: 10px;
+            font-size: 14px;
+            line-height: 1.4;
+        }
+
+        .card-message[data-kind="error"] {
+            background: #fbe6e6;
+            color: #a32d2d;
+        }
+
+        .card-message[data-kind="ok"] {
+            background: #e1f1ed;
+            color: #176b60;
+        }
+
+        .reject-form {
+            display: grid;
+            gap: 10px;
+            padding: 12px;
+            border: 1px solid #e7efed;
+            border-radius: 12px;
+            background: #f8fbfa;
+        }
+
+        .reason-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .reason-actions button.ghost,
+        .controls button.ghost {
+            background: white;
+            color: #176b60;
+            border: 1px solid #176b60;
         }
 
         .empty {
@@ -82,6 +255,70 @@
             background: white;
             text-align: center;
         }
+
+        .toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 8px;
+            padding: 14px;
+            border: 1px solid #d7e3e0;
+            border-radius: 16px;
+            background: white;
+        }
+
+        .toolbar input,
+        .toolbar select {
+            padding: 9px 12px;
+            border: 1px solid #d7e3e0;
+            border-radius: 10px;
+            font: inherit;
+            color: inherit;
+            background: #fbfdfd;
+        }
+
+        .toolbar input:focus,
+        .toolbar select:focus {
+            outline: 2px solid #176b60;
+            outline-offset: 1px;
+        }
+
+        #search {
+            flex: 1 1 220px;
+        }
+
+        #toggle-order {
+            padding: 9px 14px;
+            border: 0;
+            border-radius: 10px;
+            background: #176b60;
+            color: white;
+            font: inherit;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .result-count {
+            margin: 0 0 12px;
+            color: #5a6b68;
+            font-size: 14px;
+        }
+
+        /* Вход и выход в шапке: тот же контур, что у кнопки «История», чтобы
+           выход не выглядел главным действием страницы. */
+        button.ghost {
+            padding: 9px 14px;
+            border: 1px solid #176b60;
+            border-radius: 10px;
+            background: white;
+            color: #176b60;
+            font: inherit;
+            cursor: pointer;
+        }
+
+        button.ghost:hover {
+            background: #eef5f3;
+        }
     </style>
 </head>
 
@@ -89,23 +326,229 @@
     <header>
         <div>
             <h1>Заявки жителей</h1>
-            <p>Панель диспетчера</p>
+            <p>Панель диспетчера · <span id="who">вход…</span></p>
         </div>
 
-        <button type="button" id="refresh">Обновить</button>
+        <button type="button" id="logout" class="ghost">Выйти</button>
     </header>
 
-    <main id="requests">
-        <p class="empty">Загружаем заявки...</p>
+    <main>
+        <div class="toolbar">
+            <input
+                id="search"
+                type="search"
+                placeholder="Поиск: номер, адрес, описание…"
+                aria-label="Поиск по заявкам"
+            >
+
+            <select id="filter-status" aria-label="Фильтр по статусу">
+                <option value="">Все статусы</option>
+            </select>
+
+            <select id="sort-by" aria-label="Сортировка">
+                <option value="created_at">По дате создания</option>
+                <option value="updated_at">По изменению</option>
+                <option value="number">По номеру</option>
+                <option value="status">По статусу</option>
+                <option value="address">По адресу</option>
+                <option value="category">По категории</option>
+                <option value="managing_org">По организации</option>
+                <option value="responsible">По ответственному</option>
+            </select>
+
+            <button type="button" id="toggle-order">↓ новое сверху</button>
+        </div>
+
+        <p class="result-count" id="result-count" hidden></p>
     </main>
 
+    <div id="requests">
+        <p class="empty">Загружаем заявки...</p>
+    </div>
+
     <script>
+        const statusRejected = "Отклонена";
+
+        // Типовые причины отказа в выпадающем списке. «Другое…» открывает поле
+        // для своей формулировки. Список дублирует правду бэкенда только в том
+        // смысле, что сами причины — чисто клиентское удобство: сервер требует
+        // лишь непустой текст.
+        const REJECTION_REASONS = [
+            "Не входит в зону ответственности",
+            "Неисправность не подтвердилась при осмотре",
+            "Дубликат ранее поданной заявки",
+            "Отсутствует доступ к объекту",
+            "Ремонт запланирован на следующий период"
+        ];
+
+        const OTHER_REASON = "__other__";
+
+        // Авторы в журнале. Названия приходят из сервера, и на клиенте лежат
+        // те же строки: подписывать их «как есть» нельзя, диспетчер не должен
+        // догадываться, что значит «dispatcher».
+        const dispatcherActor = "dispatcher";
+        const residentActor = "resident";
+
+        let statuses = [];
+        let closedStatuses = new Set();
+        let order = "desc";
+        let searchTimer = null;
+
+        const container = document.getElementById("requests");
+        const search = document.getElementById("search");
+        const statusFilter = document.getElementById("filter-status");
+        const sortBy = document.getElementById("sort-by");
+        const toggleOrder = document.getElementById("toggle-order");
+        const resultCount = document.getElementById("result-count");
+        const who = document.getElementById("who");
+        const logout = document.getElementById("logout");
+
+        // Кто вошёл — спрашиваем у сервера, а не пытаемся угадать по cookie.
+        // Заодно это проверка живой сессии: если её нет или срок истёк,
+        // уходим на форму входа, вместо того чтобы показывать пустой список.
+        fetch("/auth/me")
+            .then(function (response) {
+                if (response.status === 401) {
+                    location.href = "/login";
+                    return null;
+                }
+
+                if (!response.ok) {
+                    throw new Error("auth/me");
+                }
+
+                return response.json();
+            })
+            .then(function (data) {
+                if (data && data.login) {
+                    who.textContent = data.login;
+                }
+            })
+            .catch(function () {
+                who.textContent = "не удалось определить";
+            });
+
+        logout.addEventListener("click", async function () {
+            logout.disabled = true;
+
+            try {
+                await fetch("/auth/logout", { method: "POST" });
+            } catch (error) {
+                // Выйти надо в любом случае: cookie уже могла истечь сама, и
+                // застрять на панели из-за сбоя сети неправильно.
+            }
+
+            location.href = "/login";
+        });
+
+        // Фильтры живут в адресе страницы: /admin?sort=status&order=asc&status=Новая&q=лифт.
+        // Это источник правды. Поэтому кнопка «Обновить» не нужна: обычное
+        // обновление браузера сохраняет состояние, а ссылку можно отправить
+        // коллеге — он откроет ровно тот же список.
+        function pushFiltersToURL() {
+            const params = new URLSearchParams();
+            params.set("sort", sortBy.value);
+            params.set("order", order);
+
+            if (statusFilter.value) {
+                params.set("status", statusFilter.value);
+            }
+
+            const query = search.value.trim();
+            if (query) {
+                params.set("q", query);
+            }
+
+            const target = "/admin?" + params.toString();
+            history.replaceState(null, "", params.size ? target : "/admin");
+        }
+
+        // Читает условия из адреса при первой загрузке и при навигации
+        // «назад/вперёд» (popstate).
+        function applyFiltersFromURL() {
+            const params = new URLSearchParams(location.search);
+
+            order = params.get("order") === "asc" ? "asc" : "desc";
+            sortBy.value = params.get("sort") || "created_at";
+
+            if (statusFilter.dataset.ready) {
+                statusFilter.value = params.get("status") || "";
+            }
+
+            search.value = params.get("q") || "";
+
+            applyOrderButton();
+        }
+
+        async function loadStatuses() {
+            const response = await fetch("/statuses");
+
+            if (!response.ok) {
+                throw new Error("Не удалось загрузить статусы");
+            }
+
+            const data = await response.json();
+            statuses = data.statuses || [];
+            closedStatuses = new Set(data.closed || []);
+
+            populateStatusFilter();
+        }
+
+        // Статусы приходят с сервера — там их ровно столько, сколько знает
+        // бэкенд. Отдельный список в интерфейсе дублировал бы правду и рано или
+        // поздно разошёлся бы с сервером. Порядок тоже серверный: Новая, В
+        // работе, Выполнена, Отклонена — по ходу работы, а не по алфавиту.
+        function populateStatusFilter() {
+            if (statusFilter.dataset.ready) {
+                return;
+            }
+
+            for (const status of statuses) {
+                const option = document.createElement("option");
+                option.value = status;
+                option.textContent = status;
+                statusFilter.append(option);
+            }
+
+            statusFilter.dataset.ready = "1";
+
+            // Статусы загрузились после применения фильтров из URL, поэтому
+            // значение из адреса применяем здесь, когда в списке есть option.
+            statusFilter.value = new URLSearchParams(location.search).get("status") || "";
+        }
+
+        function applyOrderButton() {
+            const text =
+                order === "desc"
+                    ? "↓ новое сверху"
+                    : "↑ старое сверху";
+            toggleOrder.textContent = text;
+            toggleOrder.title =
+                order === "desc"
+                    ? "Переключить: сначала старые"
+                    : "Переключить: сначала новые";
+        }
+
         async function loadRequests() {
-            const container = document.getElementById("requests");
             container.innerHTML = '<p class="empty">Загружаем заявки...</p>';
 
             try {
-                const response = await fetch("/requests");
+                await loadStatuses();
+
+                const params = new URLSearchParams();
+                params.set("sort", sortBy.value);
+                params.set("order", order);
+
+                if (statusFilter.value) {
+                    params.set("status", statusFilter.value);
+                }
+
+                const query = search.value.trim();
+                if (query) {
+                    params.set("q", query);
+                }
+
+                const response = await fetch("/requests?" + params.toString());
 
                 if (!response.ok) {
                     throw new Error("Ошибка сервера");
@@ -117,64 +560,476 @@
                 if (requests.length === 0) {
                     const empty = document.createElement("p");
                     empty.className = "empty";
-                    empty.textContent = "Заявок пока нет.";
+                    empty.textContent =
+                        statusFilter.value || query
+                            ? "По заданным условиям заявок не найдено."
+                            : "Заявок пока нет.";
                     container.append(empty);
+
+                    resultCount.hidden = true;
                     return;
                 }
 
                 for (const item of requests) {
-                    const card = document.createElement("article");
-                    card.className = "request-card";
-
-                    const title = document.createElement("h2");
-                    title.textContent = item.id;
-
-                    const status = document.createElement("span");
-                    status.className = "status";
-                    status.textContent = item.status;
-
-                    const address = document.createElement("p");
-                    address.textContent = "Адрес: " + item.request.address;
-
-                    const category = document.createElement("p");
-                    category.textContent = "Проблема: " + item.request.category;
-
-                    const description = document.createElement("p");
-                    description.textContent =
-                        "Описание: " + item.request.description;
-
-                    const responsible = document.createElement("p");
-                    responsible.textContent =
-                        "Ответственный: " + item.responsible;
-
-                    const createdAt = document.createElement("p");
-                    createdAt.textContent =
-                        "Создана: " +
-                        new Date(item.created_at).toLocaleString("ru-RU");
-
-                    card.append(
-                        title,
-                        status,
-                        address,
-                        category,
-                        description,
-                        responsible,
-                        createdAt
-                    );
-
-                    container.append(card);
+                    container.append(renderCard(item));
                 }
+
+                resultCount.hidden = false;
+                resultCount.textContent =
+                    requests.length === 1
+                        ? "Показана 1 заявка"
+                        : "Показано заявок: " + requests.length;
             } catch (error) {
                 container.innerHTML =
-                    '<p class="empty">Не удалось загрузить заявки.</p>';
+                    '<p class="empty">Не удалось загрузить заявки. Проверьте, что сервер запущен.</p>';
             }
         }
 
-        document
-            .getElementById("refresh")
-            .addEventListener("click", loadRequests);
+        // Поиск с небольшой задержкой: не дёргаем сервер на каждую букву.
+        search.addEventListener("input", function () {
+            clearTimeout(searchTimer);
+            searchTimer = setTimeout(function () {
+                pushFiltersToURL();
+                loadRequests();
+            }, 300);
+        });
 
+        statusFilter.addEventListener("change", function () {
+            pushFiltersToURL();
+            loadRequests();
+        });
+
+        sortBy.addEventListener("change", function () {
+            pushFiltersToURL();
+            loadRequests();
+        });
+
+        toggleOrder.addEventListener("click", function () {
+            order = order === "desc" ? "asc" : "desc";
+            applyOrderButton();
+            pushFiltersToURL();
+            loadRequests();
+        });
+
+        // Кнопка «назад/вперёд» тоже пересобирает список: история браузера
+        // теперь хранит состояния фильтров.
+        window.addEventListener("popstate", loadRequests);
+
+        applyFiltersFromURL();
+        applyOrderButton();
         loadRequests();
+
+        function cardMessage(text, kind) {
+            const message = document.createElement("p");
+            message.className = "card-message";
+            message.dataset.kind = kind;
+            message.textContent = text;
+            return message;
+        }
+
+        // Блок «Причина отказа»: выбор типовой причины, при «Другое…» —
+        // своё поле, кнопки Подтвердить/Отмена. Показывается после выбора
+        // «→ Отклонена», потому что отказ — финальное решение и кнопка
+        // должна быть осознанной.
+        function rejectionPanel(number, previous, select) {
+            const panel = document.createElement("div");
+            panel.className = "reject-form";
+
+            const hint = document.createElement("p");
+            hint.className = "closed";
+            hint.textContent = "Причина отказа:";
+
+            const reasonSelect = document.createElement("select");
+            reasonSelect.setAttribute("aria-label", "Причина отказа");
+
+            const placeholder = document.createElement("option");
+            placeholder.value = "";
+            placeholder.textContent = "Выберите причину…";
+            reasonSelect.append(placeholder);
+
+            for (const reason of REJECTION_REASONS) {
+                const option = document.createElement("option");
+                option.value = reason;
+                option.textContent = reason;
+                reasonSelect.append(option);
+            }
+
+            const custom = document.createElement("option");
+            custom.value = OTHER_REASON;
+            custom.textContent = "Другое…";
+            reasonSelect.append(custom);
+
+            const customInput = document.createElement("input");
+            customInput.type = "text";
+            customInput.className = "reason-custom";
+            customInput.placeholder = "Опишите причину";
+            customInput.maxLength = 500;
+            customInput.hidden = true;
+
+            const actions = document.createElement("div");
+            actions.className = "reason-actions";
+
+            const confirm = document.createElement("button");
+            confirm.type = "button";
+            confirm.textContent = "Подтвердить";
+            confirm.disabled = true;
+
+            const cancel = document.createElement("button");
+            cancel.type = "button";
+            cancel.className = "ghost";
+            cancel.textContent = "Отмена";
+
+            function currentReason() {
+                if (reasonSelect.value === OTHER_REASON) {
+                    return customInput.value.trim();
+                }
+                return reasonSelect.value.trim();
+            }
+
+            function updateConfirm() {
+                confirm.disabled = currentReason() === "";
+            }
+
+            reasonSelect.addEventListener("change", function () {
+                customInput.hidden = reasonSelect.value !== OTHER_REASON;
+                if (reasonSelect.value === OTHER_REASON) {
+                    customInput.focus();
+                }
+                updateConfirm();
+            });
+
+            customInput.addEventListener("input", updateConfirm);
+
+            confirm.addEventListener("click", async function () {
+                const reason = currentReason();
+                if (reason === "") {
+                    return;
+                }
+
+                confirm.disabled = true;
+                cancel.disabled = true;
+
+                const result = await changeStatus(number, statusRejected, reason);
+
+                if (result.ok) {
+                    loadRequests();
+                    return;
+                }
+
+                confirm.disabled = false;
+                cancel.disabled = false;
+
+                const old = panel.querySelector(".card-message");
+                if (old) {
+                    old.remove();
+                }
+
+                panel.append(cardMessage(result.message, "error"));
+            });
+
+            // Отмена никуда не отправляет: возвращаем прежний статус в селекте
+            // и убираем форму.
+            cancel.addEventListener("click", function () {
+                select.value = previous;
+                select.disabled = false;
+                panel.remove();
+            });
+
+            actions.append(confirm, cancel);
+            panel.append(hint, reasonSelect, customInput, actions);
+
+            select.disabled = true;
+
+            return panel;
+        }
+
+        async function changeStatus(number, next, comment) {
+            const response = await fetch(
+                "/requests/" + encodeURIComponent(number) + "/status",
+                {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ status: next, comment: comment || "" })
+                }
+            );
+
+            if (!response.ok) {
+                const data = await response.json().catch(function () {
+                    return {};
+                });
+
+                return { ok: false, message: data.error || "Ошибка сервера" };
+            }
+
+            return { ok: true, request: await response.json() };
+        }
+
+        function renderCard(item) {
+            const card = document.createElement("article");
+            card.className = "request-card";
+
+            const title = document.createElement("h2");
+            title.append(document.createTextNode(item.id));
+
+            const status = document.createElement("span");
+            status.className = "status";
+            status.dataset.status = item.status;
+            status.textContent = item.status;
+            title.append(status);
+
+            card.append(title);
+
+            // Причина отказа — сразу под заголовком, а не в конце списка
+            // полей. По отклонённой заявке первое, что нужно понять, это
+            // почему её отклонили.
+            if (item.comment) {
+                const reason = document.createElement("p");
+                reason.className = "reject-reason";
+                reason.textContent = "Причина отказа: " + item.comment;
+                card.append(reason);
+            }
+
+            const fields = [
+                ["Адрес", item.request.address],
+                ["Проблема", item.request.category],
+                ["Описание", item.request.description],
+                ["Ответственный", item.responsible],
+                ["Что делать", item.next_step],
+                ["Создана", new Date(item.created_at).toLocaleString("ru-RU")],
+                ["Изменена", new Date(item.updated_at).toLocaleString("ru-RU")]
+            ];
+
+            for (const [label, value] of fields) {
+                const line = document.createElement("p");
+                line.append(
+                    document.createTextNode(label + ": "),
+                    Object.assign(document.createElement("strong"), {
+                        textContent: value
+                    })
+                );
+                card.append(line);
+            }
+
+            const controls = document.createElement("div");
+            controls.className = "controls";
+            buildStatusControl(item, controls);
+            controls.append(historyPanel(item, controls));
+
+            card.append(controls);
+
+            return card;
+        }
+
+        // У закрытой заявки списка нет: вместо него строка и кнопка. Так у
+        // карточки без дела нет ложной стрелки справа, но вернуть заявку в
+        // работу по-прежнему можно — ошибку диспетчера надо уметь исправить.
+        // Считать «закрытой» заявку позволяет сервер, а не список в браузере.
+        function buildStatusControl(item, controls) {
+            if (!closedStatuses.has(item.status)) {
+                controls.append(statusSelect(item, controls));
+                return;
+            }
+
+            const note = document.createElement("p");
+            note.className = "closed";
+            note.textContent = "Заявка закрыта: «" + item.status + "».";
+
+            const edit = document.createElement("button");
+            edit.type = "button";
+            edit.className = "ghost";
+            edit.textContent = "Изменить статус";
+
+            edit.addEventListener("click", function () {
+                note.remove();
+                edit.remove();
+                controls.append(statusSelect(item, controls));
+            });
+
+            controls.append(note, edit);
+        }
+
+        // Журнал: кто, когда и из какого статуса в какой перевёл заявку, с
+        // причиной. Грузится по кнопке, а не вместе со списком: история нужна
+        // редко, а на каждый список из двадцати карточек двадцать лишних
+        // запросов — это заметная задержка открытия страницы.
+        function historyPanel(item, controls) {
+            const toggle = document.createElement("button");
+            toggle.type = "button";
+            toggle.className = "ghost";
+            toggle.textContent = "История";
+
+            let list = null;
+
+            toggle.addEventListener("click", async function () {
+                if (list) {
+                    list.remove();
+                    list = null;
+                    return;
+                }
+
+                toggle.disabled = true;
+
+                const response = await fetch(
+                    "/requests/" + encodeURIComponent(item.number) + "/history"
+                );
+                const history = response.ok ? await response.json() : null;
+
+                toggle.disabled = false;
+
+                if (!Array.isArray(history)) {
+                    controls.append(cardMessage("Не удалось загрузить историю", "error"));
+                    return;
+                }
+
+                list = document.createElement("ul");
+                list.className = "history";
+
+                if (history.length === 0) {
+                    const empty = document.createElement("li");
+                    empty.className = "history-empty";
+                    empty.textContent = "История пуста — заявку создали до её появления";
+                    list.append(empty);
+                }
+
+                // Сервер отдаёт свежие записи первыми, порядок не трогаем.
+                for (const entry of history) {
+                    list.append(historyEntry(entry));
+                }
+
+                controls.append(list);
+            });
+
+            return toggle;
+        }
+
+        function historyEntry(entry) {
+            const row = document.createElement("li");
+
+            // У самой первой записи прежнего статуса нет: заявка только
+            // появилась. Показывать «заявка → Новая» честнее, чем пустую
+            // строку с одним словом.
+            const chain = entry.from_status
+                ? entry.from_status + " → " + entry.to_status
+                : "заявка создана: " + entry.to_status;
+
+            const when = document.createElement("span");
+            when.className = "history-when";
+            when.textContent = formatWhen(entry.changed_at);
+
+            const what = document.createElement("span");
+            what.className = "history-what";
+            what.textContent = chain;
+
+            const who = document.createElement("span");
+            who.className = "history-who";
+            who.textContent = historyAuthor(entry.changed_by);
+
+            row.append(when, what, who);
+
+            if (entry.comment) {
+                // Причина отказа в журнале остаётся, даже когда заявку вернули
+                // в работу и в самой заявке это поле уже перезаписали.
+                const reason = document.createElement("span");
+                reason.className = "history-reason";
+                reason.textContent = entry.comment;
+                row.append(reason);
+            }
+
+            return row;
+        }
+
+        function historyAuthor(actor) {
+            if (actor === residentActor) return "житель";
+            if (actor === dispatcherActor) return "диспетчер";
+            if (actor === "system") return "система";
+            return actor || "неизвестно";
+        }
+
+        // Дата и время в местном виде: день, час, минуты. Год у записи не
+        // нужен — журнал читают в том же году, в котором смотрели заявку.
+        function formatWhen(value) {
+            if (!value) return "";
+
+            const at = new Date(value);
+            if (isNaN(at.getTime())) return value;
+
+            const pad = function (n) { return String(n).padStart(2, "0"); };
+
+            const day = pad(at.getDate()) + "." + pad(at.getMonth() + 1);
+            return day + " " + pad(at.getHours()) + ":" + pad(at.getMinutes());
+        }
+
+        // Список статусов на заявке: текущий сверху, ниже все остальные. Никаких
+        // «правильных путей» мы не навязываем — любой статус можно поставить на
+        // место любого, а исключение одно: не менять статус на тот же.
+        function statusSelect(item, controls) {
+            const select = document.createElement("select");
+            select.className = "status-select";
+            select.setAttribute("aria-label", "Сменить статус заявки");
+
+            const current = document.createElement("option");
+            current.value = item.status;
+            current.textContent = "Сейчас: " + item.status;
+            current.selected = true;
+            select.append(current);
+
+            for (const status of statuses) {
+                if (status === item.status) {
+                    continue;
+                }
+
+                const option = document.createElement("option");
+                option.value = status;
+                option.textContent = "→ " + status;
+                select.append(option);
+            }
+
+            select.addEventListener("change", async function () {
+                const previous = item.status;
+                const next = select.value;
+
+                if (next === previous) {
+                    return;
+                }
+
+                // Отказ — единственное решение, у которого спрашивают причину:
+                // её потом читает житель. Остальные переходы уходят сразу.
+                if (next === statusRejected) {
+                    const oldPanel = controls.querySelector(".reject-form");
+                    if (oldPanel) {
+                        oldPanel.remove();
+                    }
+
+                    controls.append(rejectionPanel(item.number, previous, select));
+                    return;
+                }
+
+                select.disabled = true;
+
+                const result = await changeStatus(item.number, next);
+
+                select.disabled = false;
+
+                if (result.ok) {
+                    // Список отсортирован, поэтому карточка должна встать на
+                    // своё место — перезагружаем ряд целиком.
+                    loadRequests();
+                    return;
+                }
+
+                // Не вышло — возвращаем прежний статус и показываем причину.
+                select.value = previous;
+
+                const old = controls.querySelector(".card-message");
+                if (old) {
+                    old.remove();
+                }
+
+                controls.append(cardMessage(result.message, "error"));
+            });
+
+            return select;
+        }
     </script>
 </body>
 </html>
