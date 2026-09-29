@@ -10,6 +10,9 @@ services:
       - ./migrations/002_seed.sql:/docker-entrypoint-initdb.d/002_seed.sql:ro
       - ./migrations/003_request_comment.sql:/docker-entrypoint-initdb.d/003_request_comment.sql:ro
       - ./migrations/004_backfill_history.sql:/docker-entrypoint-initdb.d/004_backfill_history.sql:ro
+      - ./migrations/005_max_user.sql:/docker-entrypoint-initdb.d/005_max_user.sql:ro
+      - ./migrations/006_max_delivery.sql:/docker-entrypoint-initdb.d/006_max_delivery.sql:ro
+      - ./migrations/007_max_inbox.sql:/docker-entrypoint-initdb.d/007_max_inbox.sql:ro
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U domryadom -d domryadom"]

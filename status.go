@@ -153,6 +153,14 @@ func changeRequestStatus(ctx context.Context, number, to, actor, comment string)
 		return SavedRequest{}, err
 	}
 
+	if saved.MaxUserID != nil {
+		_, err = tx.Exec(ctx, `INSERT INTO max_notifications (user_id, request_number, text)
+			VALUES ($1, $2, $3)`, *saved.MaxUserID, saved.Number, statusNotificationText(saved))
+		if err != nil {
+			return SavedRequest{}, err
+		}
+	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return SavedRequest{}, err
 	}

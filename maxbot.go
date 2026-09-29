@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -14,6 +15,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/jackc/pgx/v5"
 )
 
 const (
@@ -35,6 +38,7 @@ type maxUser struct {
 }
 
 type maxMessageBody struct {
+	Mid  string `json:"mid"`
 	Text string `json:"text"`
 }
 
@@ -45,6 +49,7 @@ type maxMessage struct {
 
 type maxUpdate struct {
 	UpdateType string      `json:"update_type"`
+	Timestamp  int64       `json:"timestamp"`
 	User       *maxUser    `json:"user"`
 	Message    *maxMessage `json:"message"`
 }
@@ -63,22 +68,29 @@ const (
 )
 
 type maxDialogState struct {
-	Stage     maxDialogStage
-	Category  string
-	Building  Building
-	Buildings []Building
+	Stage         maxDialogStage
+	Category      string
+	Building      Building
+	Buildings     []Building
+	LastMessageID string
 }
 
 type maxBot struct {
-	token  string
-	apiURL string
-	client *http.Client
+	token     string
+	apiURL    string
+	client    *http.Client
 
-	mu      sync.Mutex
-	dialogs map[int64]maxDialogState
-	list    func(context.Context) ([]Building, error)
-	find    func(context.Context, string) (Building, error)
-	create  func(context.Context, Building, Request) (SavedRequest, error)
+	mu        sync.Mutex
+	dialogs   map[int64]maxDialogState
+	list      func(context.Context) ([]Building, error)
+	find      func(context.Context, string) (Building, error)
+	create    func(context.Context, Building, Request, int64, string) (SavedRequest, error)
+	mine      func(context.Context, int64) ([]SavedRequest, error)
+	lookup    func(context.Context, int64, string) (SavedRequest, error)
+	byMessage func(context.Context, int64, string) (SavedRequest, error)
+	save      func(context.Context, int64, maxDialogState) error
+	remove    func(context.Context, int64) error
+	load      func(context.Context, int64) (maxDialogState, bool, error)
 }
 
 func newMaxBot(token string) *maxBot {
@@ -88,13 +100,19 @@ func newMaxBot(token string) *maxBot {
 	}
 
 	return &maxBot{
-		token:   strings.TrimSpace(token),
-		apiURL:  apiURL,
-		client:  &http.Client{Timeout: (maxPollTimeout + 10) * time.Second},
-		dialogs: make(map[int64]maxDialogState),
-		list:    getAllBuildings,
-		find:    findBuilding,
-		create:  createRequest,
+		token:     strings.TrimSpace(token),
+		apiURL:    apiURL,
+		client:    &http.Client{Timeout: (maxPollTimeout + 10) * time.Second},
+		dialogs:   make(map[int64]maxDialogState),
+		list:      getAllBuildings,
+		find:      findBuilding,
+		create:    createRequestForMax,
+		mine:      listRequestsForMax,
+		lookup:    findRequestForMax,
+		byMessage: findRequestByMaxMessage,
+		save:      saveMaxDialog,
+		remove:    removeMaxDialog,
+		load:      readMaxDialog,
 	}
 }
 
@@ -104,13 +122,26 @@ func newMaxBot(token string) *maxBot {
 func (b *maxBot) run(ctx context.Context) {
 	log.Println("MAX-бот запущен в режиме Long Polling")
 
-	var marker *int64
 	retryDelay := time.Second
 
 	for ctx.Err() == nil {
-		updates, nextMarker, err := b.getUpdates(ctx, marker)
+		marker, err := readMaxMarker(ctx)
 		if err != nil {
-			log.Printf("MAX: получение событий: %v", err)
+			log.Printf("MAX: чтение курсора: %v", err)
+			if !waitContext(ctx, retryDelay) {
+				return
+			}
+			if retryDelay < 30*time.Second {
+				retryDelay *= 2
+			}
+			continue
+		}
+		updates, nextMarker, err := b.getUpdates(ctx, marker)
+		if err == nil {
+			err = storeMaxUpdates(ctx, updates, nextMarker)
+		}
+		if err != nil {
+			log.Printf("MAX: получение/сохранение событий: %v", err)
 			if !waitContext(ctx, retryDelay) {
 				return
 			}
@@ -121,15 +152,6 @@ func (b *maxBot) run(ctx context.Context) {
 		}
 
 		retryDelay = time.Second
-		if nextMarker != nil {
-			marker = nextMarker
-		}
-
-		for _, update := range updates {
-			if err := b.handleUpdate(ctx, update); err != nil {
-				log.Printf("MAX: обработка события %q: %v", update.UpdateType, err)
-			}
-		}
 	}
 }
 
@@ -186,27 +208,89 @@ func (b *maxBot) handleUpdate(ctx context.Context, update maxUpdate) error {
 			update.Message.Sender.UserID == 0 || update.Message.Sender.IsBot {
 			return nil
 		}
-		return b.handleText(ctx, update.Message.Sender.UserID, update.Message.Body.Text)
+		return b.handleTextWithMessage(ctx, update.Message.Sender.UserID, update.Message.Body.Text, update.Message.Body.Mid)
 	}
 
 	return nil
 }
 
 func (b *maxBot) handleText(ctx context.Context, userID int64, text string) error {
+	return b.handleTextWithMessage(ctx, userID, text, "")
+}
+
+func (b *maxBot) handleTextWithMessage(ctx context.Context, userID int64, text, messageID string) error {
+	if messageID != "" && b.byMessage != nil {
+		saved, err := b.byMessage(ctx, userID, messageID)
+		if err == nil {
+			return b.sendMessage(ctx, userID, createdRequestText(saved))
+		}
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return fmt.Errorf("поиск сообщения MAX: %w", err)
+		}
+	}
 	text = strings.TrimSpace(text)
 	normalized := strings.ToLower(text)
 
 	switch normalized {
+	case "/help", "помощь":
+		return b.sendMessage(ctx, userID, "Команды:\n/new — создать заявку\n/my — мои заявки\n/status REQ-000001 — статус по номеру\n/cancel — отменить ввод")
 	case "/start", "/new", "новая заявка", "создать заявку":
 		return b.startDialog(ctx, userID)
+	case "/my", "мои заявки":
+		requests, err := b.mine(ctx, userID)
+		if err != nil {
+			return fmt.Errorf("список заявок MAX: %w", err)
+		}
+		if len(requests) == 0 {
+			return b.sendMessage(ctx, userID, "У вас пока нет заявок. Напишите /new, чтобы создать первую.")
+		}
+		var lines []string
+		for _, saved := range requests {
+			lines = append(lines, fmt.Sprintf("%s · %s · %s", saved.Number, saved.Status, saved.Request.Category))
+		}
+		return b.sendMessage(ctx, userID, "Ваши последние заявки:\n"+strings.Join(lines, "\n")+"\n\nНапишите /status REQ-000001 для подробностей.")
 	case "/cancel", "отмена":
-		b.deleteDialog(userID)
+		if err := b.deleteDialog(ctx, userID); err != nil {
+			return err
+		}
 		return b.sendMessage(ctx, userID, "Создание заявки отменено. Чтобы начать заново, напишите /new")
+	case "/status":
+		return b.sendMessage(ctx, userID, "Укажите номер: /status REQ-000001. Список своих заявок — /my.")
+	}
+	if strings.HasPrefix(normalized, "/status ") {
+		number := strings.ToUpper(strings.TrimSpace(text[len("/status "):]))
+		saved, err := b.lookup(ctx, userID, number)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return b.sendMessage(ctx, userID, "Заявка не найдена среди ваших обращений. Проверьте номер или напишите /my.")
+			}
+			return fmt.Errorf("статус заявки MAX: %w", err)
+		}
+		answer := fmt.Sprintf("%s · %s\n%s\n%s", saved.Number, saved.Status, saved.Request.Address, saved.Request.Category)
+		if saved.Comment != "" {
+			answer += "\nКомментарий: " + saved.Comment
+		}
+		return b.sendMessage(ctx, userID, answer)
 	}
 
 	state, ok := b.dialog(userID)
+	if !ok && b.load != nil {
+		var err error
+		state, ok, err = b.load(ctx, userID)
+		if err != nil {
+			return fmt.Errorf("восстановление диалога: %w", err)
+		}
+	}
 	if !ok {
 		return b.startDialog(ctx, userID)
+	}
+	if messageID != "" && state.LastMessageID == messageID {
+		switch state.Stage {
+		case maxStageBuilding:
+			return b.sendMessage(ctx, userID, "Выберите дом — отправьте его номер:\n\n"+buildingList(state.Buildings))
+		case maxStageDescription:
+			return b.sendMessage(ctx, userID, "Опишите проблему одним сообщением. Например: течёт труба на первом этаже.")
+		}
 	}
 
 	switch state.Stage {
@@ -227,7 +311,10 @@ func (b *maxBot) handleText(ctx context.Context, userID int64, text string) erro
 		state.Stage = maxStageBuilding
 		state.Category = category
 		state.Buildings = buildings
-		b.setDialog(userID, state)
+		state.LastMessageID = messageID
+		if err := b.setDialog(ctx, userID, state); err != nil {
+			return err
+		}
 
 		return b.sendMessage(ctx, userID, "Выберите дом — отправьте его номер:\n\n"+buildingList(buildings))
 
@@ -247,7 +334,10 @@ func (b *maxBot) handleText(ctx context.Context, userID int64, text string) erro
 		state.Stage = maxStageDescription
 		state.Building = building
 		state.Buildings = nil
-		b.setDialog(userID, state)
+		state.LastMessageID = messageID
+		if err := b.setDialog(ctx, userID, state); err != nil {
+			return err
+		}
 
 		return b.sendMessage(ctx, userID, "Опишите проблему одним сообщением. Например: течёт труба на первом этаже.")
 
@@ -266,33 +356,42 @@ func (b *maxBot) handleText(ctx context.Context, userID int64, text string) erro
 			BuildingID:  state.Building.ID,
 		}
 
-		saved, err := b.create(ctx, state.Building, req)
+		saved, err := b.create(ctx, state.Building, req, userID, messageID)
 		if err != nil {
 			return fmt.Errorf("сохранение заявки: %w", err)
 		}
 
-		b.deleteDialog(userID)
-		answer := fmt.Sprintf(
-			"✅ Заявка создана\n\nНомер: %s\nАдрес: %s\nКатегория: %s\nСтатус: %s\nОтветственный: %s\n\nЧто делать дальше:\n%s\n\nЧтобы создать ещё одну заявку, напишите /new",
-			saved.Number,
-			saved.Request.Address,
-			saved.Request.Category,
-			saved.Status,
-			saved.Responsible,
-			saved.NextStep,
-		)
-		return b.sendMessage(ctx, userID, answer)
+		if err := b.deleteDialog(ctx, userID); err != nil {
+			log.Printf("MAX: заявка %s сохранена, не удалось очистить диалог: %v", saved.Number, err)
+		}
+		return b.sendMessage(ctx, userID, createdRequestText(saved))
 	}
 
-	b.deleteDialog(userID)
+	if err := b.deleteDialog(ctx, userID); err != nil {
+		return err
+	}
 	return b.startDialog(ctx, userID)
 }
 
+func createdRequestText(saved SavedRequest) string {
+	return fmt.Sprintf(
+		"✅ Заявка создана\n\nНомер: %s\nАдрес: %s\nКатегория: %s\nСтатус: %s\nОтветственный: %s\n\nЧто делать дальше:\n%s\n\nЧтобы создать ещё одну заявку, напишите /new",
+		saved.Number,
+		saved.Request.Address,
+		saved.Request.Category,
+		saved.Status,
+		saved.Responsible,
+		saved.NextStep,
+	)
+}
+
 func (b *maxBot) startDialog(ctx context.Context, userID int64) error {
-	b.setDialog(userID, maxDialogState{Stage: maxStageCategory})
+	if err := b.setDialog(ctx, userID, maxDialogState{Stage: maxStageCategory}); err != nil {
+		return err
+	}
 	return b.sendMessage(ctx, userID,
 		"Здравствуйте! Я помогу создать заявку по вашему дому.\n\nВыберите категорию — отправьте цифру:\n\n"+
-			categoryList()+"\n\nДля отмены напишите /cancel")
+			categoryList()+"\n\nМои заявки: /my · Отмена: /cancel")
 }
 
 func (b *maxBot) sendMessage(ctx context.Context, userID int64, text string) error {
@@ -323,6 +422,21 @@ func (b *maxBot) sendMessage(ctx context.Context, userID int64, text string) err
 	return nil
 }
 
+func (b *maxBot) notifyStatusChange(ctx context.Context, saved SavedRequest) error {
+	if saved.MaxUserID == nil {
+		return nil
+	}
+	return b.sendMessage(ctx, *saved.MaxUserID, statusNotificationText(saved))
+}
+
+func statusNotificationText(saved SavedRequest) string {
+	message := fmt.Sprintf("Статус заявки %s изменён: %s", saved.Number, saved.Status)
+	if saved.Comment != "" {
+		message += "\nКомментарий: " + saved.Comment
+	}
+	return message
+}
+
 func (b *maxBot) dialog(userID int64) (maxDialogState, bool) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -330,16 +444,28 @@ func (b *maxBot) dialog(userID int64) (maxDialogState, bool) {
 	return state, ok
 }
 
-func (b *maxBot) setDialog(userID int64, state maxDialogState) {
+func (b *maxBot) setDialog(ctx context.Context, userID int64, state maxDialogState) error {
+	if b.save != nil {
+		if err := b.save(ctx, userID, state); err != nil {
+			return fmt.Errorf("сохранение диалога MAX: %w", err)
+		}
+	}
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.dialogs[userID] = state
+	return nil
 }
 
-func (b *maxBot) deleteDialog(userID int64) {
+func (b *maxBot) deleteDialog(ctx context.Context, userID int64) error {
+	if b.remove != nil {
+		if err := b.remove(ctx, userID); err != nil {
+			return fmt.Errorf("очистка диалога MAX: %w", err)
+		}
+	}
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	delete(b.dialogs, userID)
+	return nil
 }
 
 func categoryList() string {

@@ -18,7 +18,7 @@ RUN apk add --no-cache ca-certificates
 # на ftp.gu-st.ru, официального корня «Russian Trusted Root CA» у нас нет.
 # Смена сертификата на стороне MAX даст громкую ошибку в логах при отправке,
 # а не тихую: сообщения просто перестанут уходить.
-COPY deploy/max-root-ca.pem /usr/local/share/ca-certificates/max-root-ca.pem
+COPY deploy/max-root-ca.pem /usr/local/share/ca-certificates/max-root-ca.crt
 RUN update-ca-certificates
 
 WORKDIR /app

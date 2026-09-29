@@ -8,95 +8,10 @@
 
     <!-- Стили те же, что в admin.html: страница входа не должна выглядеть
          чужеродно рядом с панелью, в которую ведёт. -->
-    <style>
-        * {
-            box-sizing: border-box;
-        }
-
-        body {
-            max-width: 420px;
-            margin: 0 auto;
-            padding: 56px 20px;
-            background: #f3f7f6;
-            color: #17342f;
-            font-family: Arial, sans-serif;
-        }
-
-        h1 {
-            margin: 0 0 8px;
-            color: #176b60;
-            font-size: 26px;
-        }
-
-        p.subtitle {
-            margin: 0 0 28px;
-            color: #6b7d79;
-            font-size: 15px;
-            line-height: 1.5;
-        }
-
-        form {
-            display: grid;
-            gap: 16px;
-        }
-
-        label {
-            display: block;
-            margin-bottom: 6px;
-            font-size: 14px;
-            font-weight: bold;
-        }
-
-        input {
-            width: 100%;
-            min-height: 46px;
-            padding: 0 14px;
-            border: 1px solid #d7e3e0;
-            border-radius: 12px;
-            font: inherit;
-            background: white;
-        }
-
-        input:focus {
-            outline: 2px solid #176b60;
-            outline-offset: 1px;
-        }
-
-        button {
-            min-height: 48px;
-            border: 0;
-            border-radius: 12px;
-            background: #176b60;
-            color: white;
-            font: inherit;
-            font-weight: bold;
-            cursor: pointer;
-        }
-
-        button:disabled {
-            opacity: 0.6;
-            cursor: default;
-        }
-
-        #message {
-            min-height: 22px;
-            margin: 0;
-            color: #b3402f;
-            font-size: 14px;
-        }
-
-        p.back {
-            margin: 24px 0 0;
-            font-size: 14px;
-        }
-
-        p.back a {
-            color: #176b60;
-        }
-    </style>
+    <link rel="stylesheet" href="/assets/style.css">
 </head>
-<body>
-    <h1>Панель диспетчера</h1>
+<body class="login-page">
+    <div class="login-mark">Д<span>Р</span></div><p class="admin-overline">ДОМ РЯДОМ / ДОСТУП ДИСПЕТЧЕРА</p><h1>Всё под контролем<span class="title-dot">.</span></h1>
     <p class="subtitle">Вход для сотрудника управляющей организации. Заявки жителей видны только после входа.</p>
 
     <form id="login-form">

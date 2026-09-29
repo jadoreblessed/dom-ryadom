@@ -29,6 +29,8 @@ const (
 	residentActor = "resident"
 )
 
+var activeMaxBot *maxBot
+
 func main() {
 	loadEnv(".env")
 
@@ -54,7 +56,10 @@ func main() {
 	}
 
 	if token := strings.TrimSpace(os.Getenv("MAX_BOT_TOKEN")); token != "" {
-		go newMaxBot(token).run(ctx)
+		activeMaxBot = newMaxBot(token)
+		go activeMaxBot.run(ctx)
+		go activeMaxBot.runNotifications(ctx)
+		go activeMaxBot.runInbox(ctx)
 	} else {
 		log.Println("MAX_BOT_TOKEN не задан: MAX-бот отключён")
 	}
@@ -111,6 +116,10 @@ func newRouter() http.Handler {
 	mux.HandleFunc("POST /requests", handleRequestCreate)
 	mux.HandleFunc("GET /statuses", handleStatuses)
 	mux.HandleFunc("GET /app", handleApp)
+	mux.HandleFunc("GET /assets/style.css", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/css; charset=utf-8")
+		http.ServeFile(w, r, "web/style.css")
+	})
 	mux.HandleFunc("GET /{$}", handleRoot)
 	mux.HandleFunc("GET /login", handleLoginPage)
 

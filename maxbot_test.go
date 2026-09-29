@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/jackc/pgx/v5"
 )
 
 func TestMaxBotCreatesRequestFromDialog(t *testing.T) {
@@ -52,7 +54,13 @@ func TestMaxBotCreatesRequestFromDialog(t *testing.T) {
 			}
 			return building, nil
 		},
-		create: func(_ context.Context, gotBuilding Building, request Request) (SavedRequest, error) {
+		create: func(_ context.Context, gotBuilding Building, request Request, userID int64, messageID string) (SavedRequest, error) {
+			if userID != 42 {
+				t.Fatalf("MAX user id = %d", userID)
+			}
+			if messageID != "" {
+				t.Fatalf("message id = %q", messageID)
+			}
 			if gotBuilding != building {
 				t.Fatalf("building = %#v", gotBuilding)
 			}
@@ -86,6 +94,89 @@ func TestMaxBotCreatesRequestFromDialog(t *testing.T) {
 	}
 	if _, ok := bot.dialog(42); ok {
 		t.Fatal("dialog was not removed after creating request")
+	}
+}
+
+func TestMaxBotNotifiesOriginalUserOnStatusChange(t *testing.T) {
+	var recipient, message string
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		recipient = r.URL.Query().Get("user_id")
+		var body struct{ Text string `json:"text"` }
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Errorf("decode notification: %v", err)
+		}
+		message = body.Text
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer api.Close()
+
+	bot := &maxBot{apiURL: api.URL, client: api.Client()}
+	userID := int64(42)
+	saved := SavedRequest{Number: "REQ-000001", Status: "Отклонена", Comment: "Неверный адрес", MaxUserID: &userID}
+	if err := bot.notifyStatusChange(context.Background(), saved); err != nil {
+		t.Fatal(err)
+	}
+	if recipient != "42" || !strings.Contains(message, saved.Number) ||
+		!strings.Contains(message, saved.Status) || !strings.Contains(message, saved.Comment) {
+		t.Fatalf("recipient=%q, notification=%q", recipient, message)
+	}
+}
+
+func TestMaxBotStatusLookupUsesSenderIdentity(t *testing.T) {
+	var reply string
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct{ Text string `json:"text"` }
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		reply = body.Text
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer api.Close()
+	bot := &maxBot{
+		apiURL: api.URL, client: api.Client(), dialogs: make(map[int64]maxDialogState),
+		lookup: func(_ context.Context, userID int64, number string) (SavedRequest, error) {
+			if userID != 42 || number != "REQ-000001" {
+				t.Fatalf("lookup(user=%d, number=%q)", userID, number)
+			}
+			return SavedRequest{Number: number, Status: "В работе", Request: Request{Address: "ул. Лесная, д. 5"}}, nil
+		},
+	}
+	if err := bot.handleText(context.Background(), 42, "/status req-000001"); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(reply, "В работе") {
+		t.Fatalf("status reply = %q", reply)
+	}
+}
+
+func TestMaxBotResumesDialogAfterRestart(t *testing.T) {
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer api.Close()
+	var stored maxDialogState
+	store := func(_ context.Context, userID int64, state maxDialogState) error {
+		if userID != 42 {
+			t.Fatalf("user id = %d", userID)
+		}
+		stored = state
+		return nil
+	}
+	first := &maxBot{apiURL: api.URL, client: api.Client(), dialogs: make(map[int64]maxDialogState), save: store}
+	if err := first.handleText(context.Background(), 42, "/start"); err != nil {
+		t.Fatal(err)
+	}
+	second := &maxBot{
+		apiURL: api.URL, client: api.Client(), dialogs: make(map[int64]maxDialogState), save: store,
+		load: func(context.Context, int64) (maxDialogState, bool, error) { return stored, true, nil },
+		list: func(context.Context) ([]Building, error) {
+			return []Building{{ID: "house-1", Address: "ул. Лесная, д. 5"}}, nil
+		},
+	}
+	if err := second.handleText(context.Background(), 42, "1"); err != nil {
+		t.Fatal(err)
+	}
+	if stored.Stage != maxStageBuilding || stored.Category != "Протечка" {
+		t.Fatalf("restored state = %#v", stored)
 	}
 }
 
@@ -141,5 +232,92 @@ func TestChooseCategoryAndBuilding(t *testing.T) {
 	buildings := []Building{{ID: "house-1", Address: "ул. Лесная, д. 5"}}
 	if got, ok := chooseBuilding("1", buildings); !ok || got.ID != "house-1" {
 		t.Fatalf("building = %#v, %v", got, ok)
+	}
+}
+
+func TestMaxEventKeyUsesMessageIDAcrossRetries(t *testing.T) {
+	update := maxUpdate{UpdateType: "message_created", Message: &maxMessage{
+		Sender: maxUser{UserID: 42}, Body: &maxMessageBody{Mid: "mid-1", Text: "течёт труба"},
+	}}
+	key, _, err := maxEventKey(update)
+	if err != nil || key != "message:mid-1" {
+		t.Fatalf("key=%q err=%v", key, err)
+	}
+	update.Message.Body.Text = "изменённый текст"
+	again, _, err := maxEventKey(update)
+	if err != nil || again != key {
+		t.Fatalf("repeat key=%q err=%v", again, err)
+	}
+	update.Message.Body.Mid = "mid-2"
+	other, _, _ := maxEventKey(update)
+	if other == key {
+		t.Fatal("different messages shared inbox key")
+	}
+}
+
+func TestMaxBotRepeatedCreateMessageReturnsExistingRequest(t *testing.T) {
+	var reply string
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct{ Text string `json:"text"` }
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		reply = body.Text
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer api.Close()
+	bot := &maxBot{
+		apiURL: api.URL, client: api.Client(), dialogs: make(map[int64]maxDialogState),
+		byMessage: func(_ context.Context, userID int64, mid string) (SavedRequest, error) {
+			if userID != 42 || mid != "mid-1" {
+				t.Fatalf("lookup user=%d mid=%q", userID, mid)
+			}
+			return SavedRequest{Number: "REQ-000001", Status: "Новая", Request: Request{Address: "Лесная, 5"}}, nil
+		},
+		create: func(context.Context, Building, Request, int64, string) (SavedRequest, error) {
+			t.Fatal("duplicate message created a second request")
+			return SavedRequest{}, nil
+		},
+	}
+	for i := 0; i < 2; i++ {
+		if err := bot.handleTextWithMessage(context.Background(), 42, "течёт труба", "mid-1"); err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(reply, "REQ-000001") {
+			t.Fatalf("reply=%q", reply)
+		}
+	}
+}
+
+func TestMaxBotRetryDoesNotAdvanceDialogTwice(t *testing.T) {
+	var replies []string
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct{ Text string `json:"text"` }
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		replies = append(replies, body.Text)
+		if len(replies) == 1 {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer api.Close()
+	bot := &maxBot{apiURL: api.URL, client: api.Client(), dialogs: map[int64]maxDialogState{
+		42: {Stage: maxStageCategory},
+	}, list: func(context.Context) ([]Building, error) {
+		return []Building{{ID: "house-1", Address: "Лесная, 5"}}, nil
+	}, byMessage: func(context.Context, int64, string) (SavedRequest, error) {
+		return SavedRequest{}, pgx.ErrNoRows
+	}}
+	if err := bot.handleTextWithMessage(context.Background(), 42, "1", "mid-category"); err == nil {
+		t.Fatal("first send unexpectedly succeeded")
+	}
+	if err := bot.handleTextWithMessage(context.Background(), 42, "1", "mid-category"); err != nil {
+		t.Fatal(err)
+	}
+	state, _ := bot.dialog(42)
+	if state.Stage != maxStageBuilding || state.LastMessageID != "mid-category" {
+		t.Fatalf("dialog advanced twice: %#v", state)
+	}
+	if len(replies) != 2 || replies[0] != replies[1] {
+		t.Fatalf("retry replies: %#v", replies)
 	}
 }

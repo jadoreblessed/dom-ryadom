@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -41,16 +42,20 @@ func scanRequests(row pgx.Row) (SavedRequest, error) {
 // её появлении. Иначе в журнале была бы дыра в начале — а именно по началу
 // судят, что заявка вообще была, когда её открыли в первый раз.
 func createRequest(ctx context.Context, building Building, r Request) (SavedRequest, error) {
-	return createRequestWithMaxUser(ctx, building, r, nil)
+	return createRequestWithMaxUser(ctx, building, r, nil, "")
 }
 
 // createRequestForMax сохраняет связь заявки с диалогом жителя в MAX. Эта
 // связь не попадает в публичный JSON, но нужна для уведомлений о статусе.
-func createRequestForMax(ctx context.Context, building Building, r Request, userID int64) (SavedRequest, error) {
-	return createRequestWithMaxUser(ctx, building, r, &userID)
+func createRequestForMax(ctx context.Context, building Building, r Request, userID int64, messageID string) (SavedRequest, error) {
+	return createRequestWithMaxUser(ctx, building, r, &userID, messageID)
 }
 
-func createRequestWithMaxUser(ctx context.Context, building Building, r Request, maxUserID *int64) (SavedRequest, error) {
+func createRequestWithMaxUser(ctx context.Context, building Building, r Request, maxUserID *int64, messageID string) (SavedRequest, error) {
+	var maxMessageID *string
+	if messageID != "" {
+		maxMessageID = &messageID
+	}
 	saved := SavedRequest{
 		Request:     r,
 		ManagingOrg: building.ManagingOrg,
@@ -66,12 +71,19 @@ func createRequestWithMaxUser(ctx context.Context, building Building, r Request,
 	defer tx.Rollback(ctx)
 
 	err = tx.QueryRow(ctx, `
-		INSERT INTO requests (building_id, category, description, responsible, next_step, max_user_id)
-		VALUES ($1, $2, $3, $4, $5, $6)
+		INSERT INTO requests (building_id, category, description, responsible, next_step, max_user_id, max_message_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		ON CONFLICT (max_message_id) DO NOTHING
 		RETURNING id, number, status, created_at, updated_at
 	`,
-		building.ID, r.Category, r.Description, saved.Responsible, saved.NextStep, maxUserID,
+		building.ID, r.Category, r.Description, saved.Responsible, saved.NextStep, maxUserID, maxMessageID,
 	).Scan(&saved.DBID, &saved.Number, &saved.Status, &saved.CreatedAt, &saved.UpdatedAt)
+	if errors.Is(err, pgx.ErrNoRows) && maxUserID != nil && maxMessageID != nil {
+		if rollbackErr := tx.Rollback(ctx); rollbackErr != nil {
+			return SavedRequest{}, rollbackErr
+		}
+		return findRequestByMaxMessage(ctx, *maxUserID, messageID)
+	}
 	if err != nil {
 		return SavedRequest{}, err
 	}
@@ -139,4 +151,35 @@ func findRequestByNumber(ctx context.Context, number string) (SavedRequest, erro
 	return scanRequests(pool.QueryRow(ctx,
 		`SELECT `+requestColumns+requestJoin+`
 		WHERE r.number = $1`, number))
+}
+
+// A MAX user can only inspect requests created from their own chat.
+func findRequestForMax(ctx context.Context, userID int64, number string) (SavedRequest, error) {
+	return scanRequests(pool.QueryRow(ctx,
+		`SELECT `+requestColumns+requestJoin+`
+		WHERE r.number = $1 AND r.max_user_id = $2`, number, userID))
+}
+
+func findRequestByMaxMessage(ctx context.Context, userID int64, messageID string) (SavedRequest, error) {
+	return scanRequests(pool.QueryRow(ctx,
+		`SELECT `+requestColumns+requestJoin+`
+		WHERE r.max_message_id = $1 AND r.max_user_id = $2`, messageID, userID))
+}
+
+func listRequestsForMax(ctx context.Context, userID int64) ([]SavedRequest, error) {
+	rows, err := pool.Query(ctx, `SELECT `+requestColumns+requestJoin+`
+		WHERE r.max_user_id = $1 ORDER BY r.created_at DESC, r.id DESC LIMIT 10`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := []SavedRequest{}
+	for rows.Next() {
+		saved, err := scanRequests(rows)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, saved)
+	}
+	return result, rows.Err()
 }
