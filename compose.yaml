@@ -10,6 +10,7 @@ services:
       - ./migrations/002_seed.sql:/docker-entrypoint-initdb.d/002_seed.sql:ro
       - ./migrations/003_request_comment.sql:/docker-entrypoint-initdb.d/003_request_comment.sql:ro
       - ./migrations/004_backfill_history.sql:/docker-entrypoint-initdb.d/004_backfill_history.sql:ro
+      - postgres_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U domryadom -d domryadom"]
       interval: 3s
@@ -26,3 +27,6 @@ services:
     depends_on:
       db:
         condition: service_healthy
+
+volumes:
+  postgres_data:

@@ -53,6 +53,12 @@ func main() {
 		log.Fatalf("dispatcher setup failed: %v", err)
 	}
 
+	if token := strings.TrimSpace(os.Getenv("MAX_BOT_TOKEN")); token != "" {
+		go newMaxBot(token).run(ctx)
+	} else {
+		log.Println("MAX_BOT_TOKEN не задан: MAX-бот отключён")
+	}
+
 	srv := &http.Server{
 		Addr:              ":" + listenPort(),
 		Handler:           newRouter(),

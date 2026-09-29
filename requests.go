@@ -11,6 +11,7 @@ type Request struct {
 
 type SavedRequest struct {
 	DBID        int64     `json:"-"`
+	MaxUserID   *int64    `json:"-"`
 	ID          string    `json:"id"`
 	Number      string    `json:"number"`
 	Request     Request   `json:"request"`
