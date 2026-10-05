@@ -57,9 +57,15 @@ func main() {
 
 	if token := strings.TrimSpace(os.Getenv("MAX_BOT_TOKEN")); token != "" {
 		activeMaxBot = newMaxBot(token)
-		go activeMaxBot.run(ctx)
+		if strings.TrimSpace(os.Getenv("MAX_WEBHOOK_SECRET")) == "" {
+			go activeMaxBot.run(ctx)
+		} else {
+			log.Println("MAX-бот запущен в режиме Webhook")
+		}
 		go activeMaxBot.runNotifications(ctx)
-		go activeMaxBot.runInbox(ctx)
+		if strings.TrimSpace(os.Getenv("MAX_WEBHOOK_SECRET")) == "" {
+			go activeMaxBot.runInbox(ctx)
+		}
 	} else {
 		log.Println("MAX_BOT_TOKEN не задан: MAX-бот отключён")
 	}
@@ -69,7 +75,7 @@ func main() {
 		Handler:           newRouter(),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
-		WriteTimeout:      15 * time.Second,
+		WriteTimeout:      30 * time.Second,
 		IdleTimeout:       60 * time.Second,
 	}
 
@@ -110,6 +116,7 @@ func newRouter() http.Handler {
 	// GET /requests без входа отдавал все заявки всех жителей с адресами и
 	// описаниями кому угодно, кто дотянется до порта.
 	mux.HandleFunc("GET /health", handleHealth)
+	mux.HandleFunc("POST /max/webhook", handleMaxWebhook)
 	mux.HandleFunc("GET /categories", handleCategories)
 	mux.HandleFunc("GET /buildings", handleBuildings)
 	mux.HandleFunc("POST /requests/preview", handleRequestPreview)
