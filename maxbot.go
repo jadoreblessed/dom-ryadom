@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -102,7 +104,7 @@ func newMaxBot(token string) *maxBot {
 	return &maxBot{
 		token:     strings.TrimSpace(token),
 		apiURL:    apiURL,
-		client:    &http.Client{Timeout: (maxPollTimeout + 10) * time.Second},
+		client:    newMaxHTTPClient(),
 		dialogs:   make(map[int64]maxDialogState),
 		list:      getAllBuildings,
 		find:      findBuilding,
@@ -114,6 +116,31 @@ func newMaxBot(token string) *maxBot {
 		remove:    removeMaxDialog,
 		load:      readMaxDialog,
 	}
+}
+
+func newMaxHTTPClient() *http.Client {
+	client := &http.Client{Timeout: (maxPollTimeout + 10) * time.Second}
+	certificate, err := os.ReadFile("deploy/max-root-ca.pem")
+	if errors.Is(err, os.ErrNotExist) {
+		return client
+	}
+	if err != nil {
+		log.Printf("MAX: сертификат не прочитан: %v", err)
+		return client
+	}
+	roots, err := x509.SystemCertPool()
+	if err != nil {
+		log.Printf("MAX: системные сертификаты недоступны: %v", err)
+		return client
+	}
+	if !roots.AppendCertsFromPEM(certificate) {
+		log.Print("MAX: неверный формат deploy/max-root-ca.pem")
+		return client
+	}
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.TLSClientConfig = &tls.Config{RootCAs: roots}
+	client.Transport = transport
+	return client
 }
 
 // run получает события MAX через Long Polling. Для локальной разработки это
