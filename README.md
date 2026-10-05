@@ -346,3 +346,27 @@ git push -u origin feature/что-делаете
 ## Авторы
 
 Проект находится в разработке.
+## Развёртывание MAX Webhook на alwaysdata
+
+В бесплатном тарифе alwaysdata фоновая служба недоступна. Для бота задайте
+`MAX_WEBHOOK_SECRET` вместе с `MAX_BOT_TOKEN`: приложение переключится с Long
+Polling на `POST /max/webhook`. Секрет храните только в настройках окружения
+сайта, не в Git. Публикуйте сайт по HTTPS, затем настройте подписку MAX:
+
+```json
+{"url":"https://dom-ryadom.alwaysdata.net/max/webhook","update_types":["message_created","bot_started"],"secret":"YOUR_SECRET"}
+```
+
+Отправьте этот JSON методом `POST` на `https://platform-api2.max.ru/subscriptions`
+с заголовками `Authorization: <MAX_BOT_TOKEN>` и
+`Content-Type: application/json`. Сначала проверьте, что `/health` сайта
+отвечает 200. При запуске без `MAX_WEBHOOK_SECRET` локальная установка
+по-прежнему использует Long Polling.
+
+Соберите Linux-бинарник с Go версии, указанной в `go.mod`, и загрузите на сервер
+вместе с каталогами `web/` и `deploy/` (сохраните структуру каталогов). В
+настройках сайта alwaysdata выберите «User program», укажите рабочий каталог с
+файлом `app` и команду запуска `./app`. Сайт передаёт приложению свой `PORT`;
+не задавайте его вручную. Для базы укажите `DATABASE_URL` из параметров
+PostgreSQL alwaysdata, а также `AUTH_SECRET`, `MAX_BOT_TOKEN`,
+`MAX_WEBHOOK_SECRET` и `COOKIE_SECURE=true`. Пароли и токен не коммитьте.
